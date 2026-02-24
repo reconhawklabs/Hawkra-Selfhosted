@@ -1,0 +1,55 @@
+APP_DOMAIN {
+    # TLS_DIRECTIVE
+
+    # Compression
+    encode gzip
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-XSS-Protection "0"
+        Cross-Origin-Resource-Policy "same-origin"
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Embedder-Policy "require-corp"
+        -Server
+    }
+
+    # Agent poll/connect — small payloads only (8KB)
+    @agent_small {
+        path /api/agent/connect
+        path /api/agent/poll
+    }
+    handle @agent_small {
+        request_body {
+            max_size 8KB
+        }
+        reverse_proxy backend:3001
+    }
+
+    # Agent task results — medium payloads (10MB)
+    @agent_tasks {
+        path /api/agent/tasks/*
+    }
+    handle @agent_tasks {
+        request_body {
+            max_size 10MB
+        }
+        reverse_proxy backend:3001
+    }
+
+    # All other API routes (100MB for file uploads)
+    handle /api/* {
+        request_body {
+            max_size 1000MB
+        }
+        reverse_proxy backend:3001
+    }
+
+    # Frontend
+    handle {
+        reverse_proxy frontend:3000
+    }
+}

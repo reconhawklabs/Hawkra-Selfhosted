@@ -1,0 +1,90 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hawkra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hawkra}
+      POSTGRES_DB: hawkra
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hawkra"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ghcr.io/reconhawk/hawkra-backend:${VERSION:-latest}
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://hawkra:${POSTGRES_PASSWORD:-hawkra}@postgres:5432/hawkra
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: info,hawkra_backend=info
+      AGENT_BINARY_PATH: /app/agent-binaries
+      BACKEND_URL: https://${APP_DOMAIN:-localhost}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - file_storage:/app/data/files
+      - backend_config:/app/config
+      - ./license:/app/license
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    image: ghcr.io/reconhawk/hawkra-frontend:${VERSION:-latest}
+    environment:
+      NEXT_PUBLIC_API_URL: https://${APP_DOMAIN:-localhost}
+      NEXT_PUBLIC_EDITION: selfhosted
+    depends_on:
+      - backend
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    entrypoint: /docker-entrypoint.sh
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile.template:ro
+      - ./certs:/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  file_storage:
+  backend_config:
+  caddy_data:
+  caddy_config:
