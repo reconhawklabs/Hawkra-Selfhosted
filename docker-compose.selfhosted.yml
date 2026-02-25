@@ -54,6 +54,7 @@ services:
     image: ghcr.io/reconhawk/hawkra-frontend:${VERSION:-latest}
     environment:
       NEXT_PUBLIC_API_URL: https://${APP_DOMAIN:-localhost}
+      NEXT_PUBLIC_SITE_URL: https://${APP_DOMAIN:-localhost}
       NEXT_PUBLIC_EDITION: selfhosted
     depends_on:
       - backend

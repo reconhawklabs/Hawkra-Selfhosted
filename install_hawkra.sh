@@ -243,13 +243,53 @@ ensure_hosts_entry() {
     local lan_ip
     lan_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 
-    if [ -z "$lan_ip" ]; then
-        warn "Could not detect LAN IP. You may need to manually add $APP_DOMAIN to /etc/hosts."
-        return
+    # Ask which IP to bind the domain to
+    echo ""
+    echo -e "${BOLD}Network Binding${NC}"
+    echo "  Choose which IP address to map ${BOLD}${APP_DOMAIN}${NC} to in /etc/hosts."
+    echo ""
+    echo "  ${BOLD}127.0.0.1${NC} (localhost) — only this machine can reach Hawkra via the domain."
+    echo "  A ${BOLD}LAN IP${NC} allows other devices on the network to connect as well"
+    echo "  (they will also need a hosts entry or DNS record pointing to this server)."
+    echo ""
+    echo "  1) 0.0.0.0    (all interfaces)"
+    echo "  2) 127.0.0.1  (localhost only)"
+
+    local option_count=2
+    if [ -n "$lan_ip" ]; then
+        option_count=3
+        echo "  3) $lan_ip  (LAN — recommended)"
     fi
 
-    echo "$lan_ip    $APP_DOMAIN" >> /etc/hosts
-    success "Added $APP_DOMAIN -> $lan_ip to /etc/hosts"
+    echo ""
+    read -rp "  Choose [1-${option_count}] (default: ${option_count}): " bind_choice
+
+    local selected_ip
+    case "${bind_choice:-$option_count}" in
+        1)
+            selected_ip="0.0.0.0"
+            ;;
+        2)
+            selected_ip="127.0.0.1"
+            ;;
+        3)
+            if [ "$option_count" -eq 3 ]; then
+                selected_ip="$lan_ip"
+            else
+                selected_ip="127.0.0.1"
+            fi
+            ;;
+        *)
+            if [ -n "$lan_ip" ]; then
+                selected_ip="$lan_ip"
+            else
+                selected_ip="127.0.0.1"
+            fi
+            ;;
+    esac
+
+    echo "$selected_ip    $APP_DOMAIN" >> /etc/hosts
+    success "Added $APP_DOMAIN -> $selected_ip to /etc/hosts"
 }
 
 # ── Download client package ──────────────────────────────────────────────────
@@ -280,6 +320,7 @@ download_package() {
     cp -f "$TMP_DIR/$COMPOSE_FILE"              "$INSTALL_DIR/$COMPOSE_FILE"
     cp -f "$TMP_DIR/Caddyfile"                  "$INSTALL_DIR/Caddyfile"
     cp -f "$TMP_DIR/caddy/docker-entrypoint.sh" "$INSTALL_DIR/caddy/docker-entrypoint.sh"
+    cp -f "$TMP_DIR/uninstall.sh"               "$INSTALL_DIR/uninstall.sh"
 
     # Copy trial license if present and no license exists yet
     if [ ! -f "$INSTALL_DIR/license/license.key" ]; then
@@ -338,6 +379,7 @@ fix_permissions() {
     info "Setting file permissions..."
 
     chmod +x  "$INSTALL_DIR/caddy/docker-entrypoint.sh"
+    chmod +x  "$INSTALL_DIR/uninstall.sh"
     chmod 755 "$INSTALL_DIR/license"
 
     if [ -f "$INSTALL_DIR/license/license.key" ]; then
@@ -399,8 +441,9 @@ wait_for_backend() {
 
     cd "$INSTALL_DIR"
     while [ $elapsed -lt $BACKEND_HEALTH_TIMEOUT ]; do
-        # Check if the backend has produced the admin user creation log
-        if docker compose -f "$COMPOSE_FILE" logs --tail=100 backend 2>/dev/null | grep -qi "admin.*password\|password.*admin"; then
+        # Hit the health endpoint through Caddy
+        if curl -sfk --max-time 5 "https://${APP_DOMAIN}/health" > /dev/null 2>&1; then
+            echo ""
             success "Backend is ready"
             return
         fi
@@ -422,10 +465,9 @@ wait_for_backend() {
     done
 
     echo ""
-    warn "Backend did not produce credentials within ${BACKEND_HEALTH_TIMEOUT}s."
+    warn "Backend did not respond within ${BACKEND_HEALTH_TIMEOUT}s."
     warn "It may still be starting. Check logs with:"
     echo "    cd $INSTALL_DIR && docker compose -f $COMPOSE_FILE logs -f backend"
-    ADMIN_PASSWORD=""
 }
 
 # ── Extract admin password ───────────────────────────────────────────────────

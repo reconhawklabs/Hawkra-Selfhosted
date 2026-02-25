@@ -130,12 +130,6 @@ sudo cp Caddyfile /opt/hawkra/
 sudo cp caddy/docker-entrypoint.sh /opt/hawkra/caddy/
 ```
 
-Copy the license file provided to you:
-
-```bash
-sudo cp your-license.key /opt/hawkra/license/license.key
-```
-
 Your directory should look like this:
 
 ```
@@ -401,14 +395,6 @@ Restart the backend for SMTP to take effect:
 cd /opt/hawkra && sudo docker compose -f docker-compose.selfhosted.yml restart backend
 ```
 
-### Common SMTP Providers
-
-| Provider | Host | Port | Encryption |
-|----------|------|------|------------|
-| Gmail | smtp.gmail.com | 465 | ssl |
-| Outlook / O365 | smtp.office365.com | 587 | starttls |
-| Amazon SES | email-smtp.us-east-1.amazonaws.com | 465 | ssl |
-
 > SMTP settings can also be configured in **Admin > Settings** under **Email (SMTP)**, but a container restart is still required after changes.
 
 ---
@@ -450,14 +436,6 @@ sudo docker compose -f docker-compose.selfhosted.yml pull
 sudo docker compose -f docker-compose.selfhosted.yml up -d
 ```
 
-To pin a specific version, set `VERSION` in your `.env` file:
-
-```
-VERSION=1.2.0
-```
-
-Then pull and restart as shown above.
-
 ---
 
 ## 15. Backup
@@ -478,15 +456,6 @@ sudo docker run --rm \
 ```bash
 sudo docker compose -f docker-compose.selfhosted.yml exec postgres \
   pg_dump -U hawkra hawkra > /opt/hawkra/hawkra_db_backup.sql
-```
-
-### File Storage
-
-```bash
-sudo docker run --rm \
-  -v hawkra_file_storage:/source:ro \
-  -v /opt/hawkra:/backup \
-  alpine tar czf /backup/file_storage_backup.tar.gz -C /source .
 ```
 
 ---
@@ -519,7 +488,6 @@ sudo docker compose -f docker-compose.selfhosted.yml logs -f caddy
 | Backend can't connect to database | Ensure `POSTGRES_PASSWORD` in `.env` is correct. Check: `docker compose logs postgres` |
 | CORS errors in browser | Verify `CORS_ALLOWED_ORIGINS` in `.env` exactly matches the URL in your browser address bar, including `https://`. |
 | License upload fails | The `./license` directory must be writable by the container. Run `sudo chmod 755 /opt/hawkra/license` and restart. |
-| Email not sending | Verify all six `SMTP_*` variables are set in `.env`. Restart the backend after changes. Check `docker compose logs backend` for SMTP errors. |
 | Domain not resolving | Confirm the `/etc/hosts` entry exists on both the server and the client machine accessing the UI. |
 
 ### Restart All Services
