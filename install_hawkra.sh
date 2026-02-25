@@ -246,10 +246,10 @@ ensure_hosts_entry() {
     # Ask which IP to bind the domain to
     echo ""
     echo -e "${BOLD}Network Binding${NC}"
-    echo "  Choose which IP address to map ${BOLD}${APP_DOMAIN}${NC} to in /etc/hosts."
+    echo -e "  Choose which IP address to map ${BOLD}${APP_DOMAIN}${NC} to in /etc/hosts."
     echo ""
-    echo "  ${BOLD}127.0.0.1${NC} (localhost) — only this machine can reach Hawkra via the domain."
-    echo "  A ${BOLD}LAN IP${NC} allows other devices on the network to connect as well"
+    echo -e "  ${BOLD}127.0.0.1${NC} (localhost) — only this machine can reach Hawkra via the domain."
+    echo -e "  A ${BOLD}LAN IP${NC} allows other devices on the network to connect as well"
     echo "  (they will also need a hosts entry or DNS record pointing to this server)."
     echo ""
     echo "  1) 0.0.0.0    (all interfaces)"
@@ -320,7 +320,7 @@ download_package() {
     cp -f "$TMP_DIR/$COMPOSE_FILE"              "$INSTALL_DIR/$COMPOSE_FILE"
     cp -f "$TMP_DIR/Caddyfile"                  "$INSTALL_DIR/Caddyfile"
     cp -f "$TMP_DIR/caddy/docker-entrypoint.sh" "$INSTALL_DIR/caddy/docker-entrypoint.sh"
-    cp -f "$TMP_DIR/uninstall.sh"               "$INSTALL_DIR/uninstall.sh"
+    cp -f "$TMP_DIR/uninstall_hawkra.sh"         "$INSTALL_DIR/uninstall_hawkra.sh"
 
     # Copy trial license if present and no license exists yet
     if [ ! -f "$INSTALL_DIR/license/license.key" ]; then
@@ -379,8 +379,8 @@ fix_permissions() {
     info "Setting file permissions..."
 
     chmod +x  "$INSTALL_DIR/caddy/docker-entrypoint.sh"
-    chmod +x  "$INSTALL_DIR/uninstall.sh"
-    chmod 755 "$INSTALL_DIR/license"
+    chmod +x  "$INSTALL_DIR/uninstall_hawkra.sh"
+    chmod 777 "$INSTALL_DIR/license"
 
     if [ -f "$INSTALL_DIR/license/license.key" ]; then
         chmod 644 "$INSTALL_DIR/license/license.key"
@@ -437,17 +437,10 @@ wait_for_backend() {
     info "Waiting for backend to become ready (up to ${BACKEND_HEALTH_TIMEOUT}s)..."
 
     local elapsed=0
-    local interval=5
+    local interval=3
 
     cd "$INSTALL_DIR"
     while [ $elapsed -lt $BACKEND_HEALTH_TIMEOUT ]; do
-        # Hit the health endpoint through Caddy
-        if curl -sfk --max-time 5 "https://${APP_DOMAIN}/health" > /dev/null 2>&1; then
-            echo ""
-            success "Backend is ready"
-            return
-        fi
-
         # Check if the container has exited/crashed
         local state
         state=$(docker compose -f "$COMPOSE_FILE" ps backend --format '{{.State}}' 2>/dev/null || true)
@@ -457,6 +450,13 @@ wait_for_backend() {
             warn "Backend container exited unexpectedly. Logs:"
             docker compose -f "$COMPOSE_FILE" logs --tail=30 backend
             fail "Backend failed to start. See logs above."
+        fi
+
+        # Check backend logs for the "Starting server" line
+        if docker compose -f "$COMPOSE_FILE" logs backend 2>/dev/null | grep -q "Starting server on"; then
+            echo ""
+            success "Backend is ready"
+            return
         fi
 
         sleep $interval
