@@ -27,7 +27,6 @@ services:
     image: ghcr.io/reconhawk/hawkra-backend:${VERSION:-latest}
     cap_add:
       - NET_RAW
-      - NET_ADMIN
     env_file: .env
     environment:
       DATABASE_URL: postgres://hawkra:${POSTGRES_PASSWORD:-hawkra}@postgres:5432/hawkra
@@ -35,6 +34,11 @@ services:
       RUST_LOG: info,hawkra_backend=info
       AGENT_BINARY_PATH: /app/agent-binaries
       BACKEND_URL: https://${APP_DOMAIN:-localhost}
+      # TalonStrike (optional — falls back to global LLM_MODE / GEMINI_API_KEY)
+      TALONSTRIKE_LLM_MODE: ${TALONSTRIKE_LLM_MODE:-}
+      TALONSTRIKE_GEMINI_API_KEY: ${TALONSTRIKE_GEMINI_API_KEY:-}
+      TALONSTRIKE_GEMINI_MODEL: ${TALONSTRIKE_GEMINI_MODEL:-}
+      TALONSTRIKE_LOCAL_LLM_SERVER: ${TALONSTRIKE_LOCAL_LLM_SERVER:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,6 +49,8 @@ services:
       - file_storage:/app/data/files
       - backend_config:/app/config
       - ./license:/app/license
+      # TalonStrike needs Docker socket to manage Kali containers
+      - /var/run/docker.sock:/var/run/docker.sock
     logging:
       options:
         max-size: "10m"
